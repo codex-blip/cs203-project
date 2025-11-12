@@ -1,0 +1,3 @@
+iverilog -o cache_sim fully_associative_cache.v cache_control_fsm.v cache_memory_array.v comparator_logic.v replacement_policy.v main_memory.v cache_testbench.v
+vvp cache_sim
+gtkwave cache_waves.vcd  # For waveform viewing
