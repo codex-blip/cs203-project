@@ -23,7 +23,8 @@ module cache_control_fsm #(
     output reg [DATA_WIDTH-1:0] read_data,
     output reg hit_signal,
     output reg miss_signal,
-    output reg ready
+    output reg ready,
+    output reg [ADDR_WIDTH-1:0] current_address  // Address being processed
 );
 
     // FSM States
@@ -35,11 +36,12 @@ module cache_control_fsm #(
     parameter [2:0] WRITE_MISS = 3'b101;
     parameter [2:0] UPDATE_CACHE = 3'b110;
     
-    reg [2:0] current_state, next_state;
+    reg [2:0] current_state, next_state, previous_state;
     reg [ADDR_WIDTH-1:0] saved_address;
     reg [DATA_WIDTH-1:0] saved_write_data;
     reg read_operation;
     reg [1:0] target_line;
+    reg sampled_hit;  // Sample cache_hit for next_state decision
 
     // Helper function to convert state to string - MOVED BEFORE ITS USE
     function [80:0] state_to_string;
@@ -62,8 +64,10 @@ module cache_control_fsm #(
     always @(posedge clk or posedge reset) begin
         if (reset) begin
             current_state <= IDLE;
+            previous_state <= IDLE;
             $display("[FSM] System Reset -> Initializing to IDLE state");
         end else begin
+            previous_state <= current_state;
             current_state <= next_state;
             if (current_state != next_state) begin
                 $display("[FSM] State Transition: %s -> %s", 
@@ -84,17 +88,22 @@ module cache_control_fsm #(
             end
             
             TAG_COMPARE: begin
-                if (cache_hit) begin
-                    if (read_request) 
-                        next_state = READ_HIT;
-                    else 
-                        next_state = WRITE_HIT;
-                end else begin
-                    if (read_request) 
-                        next_state = READ_MISS;
-                    else 
-                        next_state = WRITE_MISS;
+                // Only decide after being in TAG_COMPARE for at least one cycle
+                if (previous_state == TAG_COMPARE) begin
+                    $display("[FSM] Making decision: sampled_hit=%b, read_op=%b", sampled_hit, read_operation);
+                    if (sampled_hit) begin
+                        if (read_operation) 
+                            next_state = READ_HIT;
+                        else 
+                            next_state = WRITE_HIT;
+                    end else begin
+                        if (read_operation) 
+                            next_state = READ_MISS;
+                        else 
+                            next_state = WRITE_MISS;
+                    end
                 end
+                // else stay in TAG_COMPARE for one more cycle
             end
             
             READ_HIT, WRITE_HIT: begin
@@ -131,6 +140,8 @@ module cache_control_fsm #(
             saved_write_data <= 8'b0;
             read_operation <= 1'b0;
             target_line <= 2'b0;
+            current_address <= 8'b0;
+            sampled_hit <= 1'b0;
         end else begin
             // Default values
             line_select <= 4'b0000;
@@ -147,6 +158,7 @@ module cache_control_fsm #(
                     if (read_request || write_request) begin
                         ready <= 1'b0;
                         saved_address <= address;
+                        current_address <= address;  // Update current address
                         saved_write_data <= write_data;
                         read_operation <= read_request;
                         $display("[FSM] New %s Request -> Address: 0x%02h", 
@@ -155,8 +167,9 @@ module cache_control_fsm #(
                 end
                 
                 TAG_COMPARE: begin
-                    $display("[FSM] Tag Comparison Result: %s", 
-                             cache_hit ? "HIT" : "MISS");
+                    sampled_hit <= cache_hit;  // Sample for next cycle's decision
+                    $display("[FSM] Tag Comparison Result: %s (prev=%s)", 
+                             cache_hit ? "HIT" : "MISS", state_to_string(previous_state));
                 end
                 
                 READ_HIT: begin

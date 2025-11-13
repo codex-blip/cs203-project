@@ -39,6 +39,8 @@ module fully_associative_cache #(
     // Control signals
     wire hit_signal, miss_signal, ready_signal;
     wire [DATA_WIDTH-1:0] read_data_signal;
+    wire [ADDR_WIDTH-1:0] fsm_address;  // Address from FSM for comparison
+    wire comparator_hit;  // Hit signal from comparator
 
     // Instantiate cache memory array - FIXED CONNECTIONS
     cache_memory_array cache_array (
@@ -46,7 +48,7 @@ module fully_associative_cache #(
         .reset(reset),
         .line_select(line_select),
         .write_enable(cache_write_enable),
-        .tag_in(addr),  // Using full address as tag (simple)
+        .tag_in(fsm_address),  // Use FSM address for tags too!
         .data_in(data_in),
         .set_valid(set_valid_bit),
         .set_dirty(set_dirty_bit),
@@ -71,7 +73,7 @@ module fully_associative_cache #(
 
     // Instantiate comparator logic - FIXED CONNECTIONS
     comparator_logic comparators (
-        .address(addr),
+        .address(fsm_address),  // Use FSM's saved address
         .tag_out_0(tag_out_0),
         .tag_out_1(tag_out_1),
         .tag_out_2(tag_out_2),
@@ -80,7 +82,7 @@ module fully_associative_cache #(
         .valid_1(valid_1),
         .valid_2(valid_2),
         .valid_3(valid_3),
-        .hit(hit),
+        .hit(comparator_hit),  // Use separate wire for comparator output
         .hit_lines(hit_lines),
         .hit_index(hit_index)
     );
@@ -90,7 +92,7 @@ module fully_associative_cache #(
         .clk(clk),
         .reset(reset),
         .access_lines(hit_lines),
-        .update_policy(hit),  // Update on hits
+        .update_policy(comparator_hit),  // Update on comparator hits
         .replace_index(replace_index),
         .replacement_ready()
     );
@@ -103,7 +105,7 @@ module fully_associative_cache #(
         .write_request(write),
         .address(addr),
         .write_data(data_in),
-        .cache_hit(hit),
+        .cache_hit(comparator_hit),  // Use comparator output
         .hit_lines(hit_lines),
         .hit_index(hit_index),
         .replace_index(replace_index),
@@ -115,7 +117,8 @@ module fully_associative_cache #(
         .read_data(read_data_signal),
         .hit_signal(hit_signal),
         .miss_signal(miss_signal),
-        .ready(ready_signal)
+        .ready(ready_signal),
+        .current_address(fsm_address)  // Output the address FSM is using
     );
 
     // Connect outputs

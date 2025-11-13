@@ -160,8 +160,29 @@ module testbench_working;
         write = 0;
         #50;
         
-        // Test 5: Verify all data
+        // Test 5: Write Hit (Update existing data)
         test_count = 5;
+        $display("\n--- Test %0d: Write Hit (Update Cached Data) ---", test_count);
+        
+        // Write to 8'h10 again (already in cache from Test 1)
+        wait_for_ready();
+        @(negedge clk);
+        addr = 8'h10;
+        data_in = 8'hFF;
+        write = 1;
+        $display("[CPU] WRITE Operation -> Address: 0x%02h, Data: 0x%02h (UPDATE)", 8'h10, 8'hFF);
+        wait_for_ready();
+        @(negedge clk);
+        write = 0;
+        if (hit) begin
+            $display("[CACHE] *** WRITE HIT *** Data updated in cache");
+        end else if (miss) begin
+            $display("[CACHE] *** WRITE MISS *** Unexpected!");
+        end
+        #50;
+        
+        // Test 6: Verify all data
+        test_count = 6;
         $display("\n--- Test %0d: Verify All Cached Data ---", test_count);
         
         // Read 8'h10
